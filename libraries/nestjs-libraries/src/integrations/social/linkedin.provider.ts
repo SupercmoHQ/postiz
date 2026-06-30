@@ -31,15 +31,14 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   oneTimeToken = true;
 
   isBetweenSteps = false;
-  // koro fork: personal posting only. The org scopes (rw_organization_admin /
-  // w_organization_social / r_organization_social) require LinkedIn's Community
-  // Management API product, which our app isn't granted and which we don't use —
-  // requesting them made the whole OAuth fail with unauthorized_scope_error.
+  // koro fork: personal posting only. Dropped the org scopes (rw_organization_admin /
+  // w_organization_social / r_organization_social — need the Community Management API) AND
+  // r_basicprofile (legacy Sign-In-v1, deprecated; replaced by `openid profile`). Our app
+  // only has Share-on-LinkedIn + OpenID, so anything else fails with unauthorized_scope_error.
   scopes = [
     'openid',
     'profile',
     'w_member_social',
-    'r_basicprofile',
   ];
   override maxConcurrentJob = 2;
   refreshWait = true;
@@ -116,14 +115,6 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       })
     ).json();
 
-    const { vanityName } = await (
-      await fetch('https://api.linkedin.com/v2/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
     const {
       name,
       sub: id,
@@ -143,7 +134,8 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       expiresIn: expires_in,
       name,
       picture: picture || '',
-      username: vanityName,
+      // koro fork: was vanityName from /v2/me (needs legacy r_basicprofile) — dropped
+      username: name,
     };
   }
 
@@ -208,14 +200,6 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       })
     ).json();
 
-    const { vanityName } = await (
-      await fetch('https://api.linkedin.com/v2/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
     return {
       id,
       accessToken,
@@ -223,7 +207,8 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       expiresIn,
       name,
       picture,
-      username: vanityName,
+      // koro fork: was vanityName from /v2/me (needs legacy r_basicprofile) — dropped
+      username: name,
     };
   }
 
