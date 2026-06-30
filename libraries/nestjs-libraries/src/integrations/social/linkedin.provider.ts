@@ -31,14 +31,15 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   oneTimeToken = true;
 
   isBetweenSteps = false;
+  // koro fork: personal posting only. The org scopes (rw_organization_admin /
+  // w_organization_social / r_organization_social) require LinkedIn's Community
+  // Management API product, which our app isn't granted and which we don't use —
+  // requesting them made the whole OAuth fail with unauthorized_scope_error.
   scopes = [
     'openid',
     'profile',
     'w_member_social',
     'r_basicprofile',
-    'rw_organization_admin',
-    'w_organization_social',
-    'r_organization_social',
   ];
   override maxConcurrentJob = 2;
   refreshWait = true;
