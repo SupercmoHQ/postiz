@@ -488,6 +488,23 @@ export class PostsRepository {
     });
   }
 
+  updatePostContent(orgId: string, id: string, content?: string, image?: string) {
+    // In-place PARTIAL edit of a single scheduled/draft post — sets only the fields supplied
+    // (content and/or image JSON), keyed on the post id so id/group are preserved (no
+    // delete+recreate) and releaseId/external references stay bound. A media-only edit leaves the
+    // existing caption untouched. Org-scoped like changeDate/updateReleaseId above.
+    return this._post.model.post.update({
+      where: {
+        organizationId: orgId,
+        id,
+      },
+      data: {
+        ...(content !== undefined ? { content } : {}),
+        ...(image !== undefined ? { image } : {}),
+      },
+    });
+  }
+
   countPostsFromDay(orgId: string, date: Date) {
     return this._post.model.post.count({
       where: {

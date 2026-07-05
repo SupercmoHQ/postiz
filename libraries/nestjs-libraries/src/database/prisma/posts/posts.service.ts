@@ -973,6 +973,9 @@ export class PostsService {
     action: 'schedule' | 'update' = 'schedule'
   ) {
     const getPostById = await this._postRepository.getPostById(id, orgId);
+    if (!getPostById) {
+      throw new BadRequestException('Post not found');
+    }
 
     // schedule: Set status to QUEUE and change date (reschedule the post)
     // update: Just change the date without changing the status
@@ -998,6 +1001,30 @@ export class PostsService {
     }
 
     return newDate;
+  }
+
+  async updatePublicContent(
+    orgId: string,
+    id: string,
+    content?: string,
+    image?: any[]
+  ) {
+    // Public in-place PARTIAL edit — verifies org ownership, refuses already-published posts, then
+    // updates only the fields supplied (content and/or image JSON). Keeps the post id stable (no
+    // delete+recreate). Callers that also want to reschedule use changeDate separately.
+    const existing = await this._postRepository.getPostById(id, orgId);
+    if (!existing) {
+      throw new BadRequestException('Post not found');
+    }
+    if (existing.state === 'PUBLISHED') {
+      throw new BadRequestException('Cannot edit a published post');
+    }
+    return this._postRepository.updatePostContent(
+      orgId,
+      id,
+      content,
+      image !== undefined ? JSON.stringify(image) : undefined
+    );
   }
 
   async generatePostsDraft(orgId: string, body: CreateGeneratedPostsDto) {

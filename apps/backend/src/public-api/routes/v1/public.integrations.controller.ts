@@ -256,6 +256,45 @@ export class PublicIntegrationsController {
     return this._postsService.deletePost(org.id, group);
   }
 
+  @Put('/posts/:id')
+  async updatePostContent(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: { content?: string; image?: any[] }
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    if (body?.content !== undefined && typeof body.content !== 'string') {
+      throw new HttpException({ msg: 'content must be a string' }, 400);
+    }
+    if (body?.content === undefined && body?.image === undefined) {
+      throw new HttpException({ msg: 'content or image is required' }, 400);
+    }
+    return this._postsService.updatePublicContent(
+      org.id,
+      id,
+      body.content,
+      body.image
+    );
+  }
+
+  @Put('/posts/:id/date')
+  async changePostDate(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: { date: string; action?: 'schedule' | 'update' }
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    if (!body?.date) {
+      throw new HttpException({ msg: 'date is required (ISO8601)' }, 400);
+    }
+    return this._postsService.changeDate(
+      org.id,
+      id,
+      body.date,
+      body.action === 'update' ? 'update' : 'schedule'
+    );
+  }
+
   @Get('/is-connected')
   async getActiveIntegrations(@GetOrgFromRequest() org: Organization) {
     Sentry.metrics.count('public_api-request', 1);
