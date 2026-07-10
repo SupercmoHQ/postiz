@@ -122,4 +122,11 @@ export class CreatePostDto {
   @ValidateNested({ each: true })
   @ArrayMinSize(1)
   posts: Post[];
+
+  // koro fork: optional client-supplied idempotency key. A repeat create with the same
+  // (organization, idempotencyKey) returns the EXISTING post instead of creating a second —
+  // effectively-once posting for retried/ambiguous callers. Null/absent = no dedup (unchanged).
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

@@ -878,56 +878,85 @@ export class PostsService {
     body: CreatePostDto,
     creationMethod: CreationMethod
   ): Promise<any[]> {
-    const postList = [];
-    for (const post of body.posts) {
-      const provider = this._integrationManager.getSocialIntegration(
-        (post.settings as any)?.__type
-      );
-      const removeLinks = !!provider?.stripLinks?.();
-
-      const messages = (post.value || []).map((p) => p.content);
-      // No point shortlinking links on platforms that strip them out anyway
-      const updateContent =
-        !body.shortLink || removeLinks
-          ? messages
-          : await this._shortLinkService.convertTextToShortLinks(
-              orgId,
-              messages
-            );
-
-      post.value = (post.value || []).map((p, i) => ({
-        ...p,
-        content: removeLinks ? stripLinks(updateContent[i]) : updateContent[i],
-      }));
-
-      const { posts } = await this._postRepository.createOrUpdatePost(
-        body.type,
+    // koro fork: effectively-once. A repeat create with the same (org, idempotencyKey) returns the
+    // EXISTING post instead of creating a second — retried/ambiguous callers never double-post.
+    if (body.idempotencyKey) {
+      const existing = await this._postRepository.findByIdempotencyKey(
         orgId,
-        body.type === 'now' ? dayjs().format('YYYY-MM-DDTHH:mm:00') : body.date,
-        post,
-        body.tags,
-        creationMethod,
-        body.inter
+        body.idempotencyKey
       );
-
-      if (!posts?.length) {
-        return [] as any[];
+      if (existing) {
+        return [{ postId: existing.id, integration: existing.integrationId }];
       }
+    }
 
-      if (body.type !== 'update') {
-        this.startWorkflow(
-          post.settings.__type.split('-')[0].toLowerCase(),
-          posts[0].id,
+    const postList = [];
+    try {
+      for (const post of body.posts) {
+        const provider = this._integrationManager.getSocialIntegration(
+          (post.settings as any)?.__type
+        );
+        const removeLinks = !!provider?.stripLinks?.();
+
+        const messages = (post.value || []).map((p) => p.content);
+        // No point shortlinking links on platforms that strip them out anyway
+        const updateContent =
+          !body.shortLink || removeLinks
+            ? messages
+            : await this._shortLinkService.convertTextToShortLinks(
+                orgId,
+                messages
+              );
+
+        post.value = (post.value || []).map((p, i) => ({
+          ...p,
+          content: removeLinks ? stripLinks(updateContent[i]) : updateContent[i],
+        }));
+
+        const { posts } = await this._postRepository.createOrUpdatePost(
+          body.type,
           orgId,
-          posts[0].state
-        ).catch((err) => {});
-      }
+          body.type === 'now' ? dayjs().format('YYYY-MM-DDTHH:mm:00') : body.date,
+          post,
+          body.tags,
+          creationMethod,
+          body.inter,
+          // Only the first integration's post carries the key (the unique is per org+key).
+          postList.length === 0 ? body.idempotencyKey : undefined
+        );
 
-      Sentry.metrics.count('post_created', 1);
-      postList.push({
-        postId: posts[0].id,
-        integration: post.integration.id,
-      });
+        if (!posts?.length) {
+          return [] as any[];
+        }
+
+        if (body.type !== 'update') {
+          this.startWorkflow(
+            post.settings.__type.split('-')[0].toLowerCase(),
+            posts[0].id,
+            orgId,
+            posts[0].state
+          ).catch((err) => {});
+        }
+
+        Sentry.metrics.count('post_created', 1);
+        postList.push({
+          postId: posts[0].id,
+          integration: post.integration.id,
+        });
+      }
+    } catch (err) {
+      // koro fork: lost the race — a concurrent create with the same key won. Return its post
+      // rather than surfacing the unique-constraint violation.
+      if (body.idempotencyKey && (err as any)?.code === 'P2002') {
+        const existing = await this._postRepository.findByIdempotencyKey(
+          orgId,
+          body.idempotencyKey
+        );
+        if (existing) {
+          return [{ postId: existing.id, integration: existing.integrationId }];
+        }
+      }
+      throw err;
     }
 
     return postList;

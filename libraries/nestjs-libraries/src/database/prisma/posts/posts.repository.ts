@@ -181,6 +181,7 @@ export class PostsRepository {
         intervalInDays: true,
         group: true,
         creationMethod: true,
+        idempotencyKey: true,
         tags: {
           select: {
             tag: true,
@@ -527,6 +528,14 @@ export class PostsRepository {
     });
   }
 
+  // koro fork: resolve a prior create by its client idempotency key (effectively-once dedup).
+  async findByIdempotencyKey(orgId: string, idempotencyKey: string) {
+    return this._post.model.post.findFirst({
+      where: { organizationId: orgId, idempotencyKey },
+      select: { id: true, integrationId: true },
+    });
+  }
+
   async createOrUpdatePost(
     state: 'draft' | 'schedule' | 'now' | 'update',
     orgId: string,
@@ -534,7 +543,8 @@ export class PostsRepository {
     body: PostBody,
     tags: { value: string; label: string }[],
     creationMethod: CreationMethod,
-    inter?: number
+    inter?: number,
+    idempotencyKey?: string
   ) {
     const posts: Post[] = [];
     const uuid = uuidv4();
@@ -569,6 +579,11 @@ export class PostsRepository {
         intervalInDays: inter ? +inter : null,
         approvedSubmitForOrder: APPROVED_SUBMIT_FOR_ORDER.NO,
         ...(type === 'create' ? { creationMethod } : {}),
+        // koro fork: stamp the idempotency key on the parent post only (first value in the group),
+        // on create. The (organizationId, idempotencyKey) unique makes a concurrent repeat throw.
+        ...(type === 'create' && posts.length === 0 && idempotencyKey
+          ? { idempotencyKey }
+          : {}),
         ...(state === 'update'
           ? {}
           : {

@@ -413,6 +413,7 @@ model Post {
   lastMessageId              String?
   intervalInDays             Int?
   error                      String?
+  idempotencyKey             String?
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
   deletedAt                  DateTime?
@@ -443,6 +444,9 @@ model Post {
   @@index([updatedAt])
   @@index([releaseURL])
   @@index([integrationId])
+  // koro fork: effectively-once posting. Postgres treats multiple NULLs as distinct, so
+  // non-keyed posts are unaffected; a repeat (org, key) create hits this and is deduped.
+  @@unique([organizationId, idempotencyKey])
 }
 
 model Notifications {
