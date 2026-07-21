@@ -189,14 +189,23 @@ export abstract class SocialAbstract {
     ignoreConcurrency = false,
     message = ''
   ): Promise<Response> {
-    const ctx = Context.current();
+    // Context.current() throws outside a Temporal activity. Some providers call
+    // this.fetch on the plain HTTP path (e.g. the Threads OAuth connect callback),
+    // not inside an activity — guard it so heartbeat is a no-op there.
+    const ctx = (() => {
+      try {
+        return Context.current();
+      } catch {
+        return null;
+      }
+    })();
     // Providers fetch user-supplied URLs (WordPress domain, Mastodon/Lemmy
     // instance, Listmonk URL, etc.). Route through the SSRF guard so those
     // requests can't be pointed at internal/private IPs (cloud metadata,
     // localhost services, the internal network). Opt-out via env for
     // self-hosters on a trusted private network. A caller may still pass its
     // own dispatcher explicitly.
-    ctx.heartbeat(url);
+    ctx?.heartbeat(url);
     const request = await fetch(url, {
       ...options,
       // @ts-ignore - undici-only option, not in the lib.dom RequestInit type
