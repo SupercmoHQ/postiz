@@ -209,10 +209,17 @@ export const ContinueIntegration: FC<{
       setIsSaving(true);
 
       try {
-        // Use public or authenticated endpoint based on the flow
-        const endpoint = logged
-          ? `/integrations/provider/${twoStepState.integrationId}/connect`
-          : `/integrations/public/provider/${twoStepState.integrationId}/connect`;
+        // The pending integration is created in step 1 via the state-based
+        // social-connect endpoint, so it's bound to the OAuth STATE's org — not the
+        // browser's Postiz session org. When a state is present (embedded/public
+        // flow, e.g. koro-driven connects), finalize through the SAME state-based
+        // endpoint; otherwise a stale/foreign Postiz session makes `logged` true and
+        // the authed endpoint resolves the wrong org → getIntegrationById 404s.
+        const hasState = !!(modifiedParams as any)?.state;
+        const endpoint =
+          logged && !hasState
+            ? `/integrations/provider/${twoStepState.integrationId}/connect`
+            : `/integrations/public/provider/${twoStepState.integrationId}/connect`;
 
         const response = await fetch(endpoint, {
           method: 'POST',
