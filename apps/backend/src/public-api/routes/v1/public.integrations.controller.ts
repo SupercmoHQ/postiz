@@ -341,7 +341,11 @@ export class PublicIntegrationsController {
   async getIntegrationUrl(
     @Param('integration') integration: string,
     @Query('refresh') refresh: string,
-    @GetOrgFromRequest() org: Organization
+    @GetOrgFromRequest() org: Organization,
+    // Embedded/headless callers (koro) pass returnUrl so the two-step connect
+    // redirects back to their app after the account-picker, instead of stranding
+    // the user on Postiz. Stored under redirect:{state}, read by the connect flow.
+    @Query('returnUrl') returnUrl?: string
   ) {
     Sentry.metrics.count('public_api-request', 1);
     if (
@@ -374,6 +378,9 @@ export class PublicIntegrationsController {
 
       await ioRedis.set(`organization:${state}`, org.id, 'EX', 3600);
       await ioRedis.set(`login:${state}`, codeVerifier, 'EX', 3600);
+      if (returnUrl) {
+        await ioRedis.set(`redirect:${state}`, returnUrl, 'EX', 3600);
+      }
 
       return { url };
     } catch (err) {
